@@ -30,8 +30,6 @@ class Payment(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     scenario: Mapped[str] = mapped_column(String(32), nullable=False)
-    # Момент, когда фоновая задача должна выполнить переход (для отложенных сценариев).
-    transition_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
