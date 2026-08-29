@@ -76,8 +76,9 @@ payment-emulator/
 
 ## Хранение состояния
 
-- Таблица `payments`: id, requisite (маскированный), amount, status, idempotency_key,
-  created_at, updated_at
+- Таблица `payments`: id, requisite, amount, status, idempotency_key,
+  created_at, updated_at (реквизит хранится как есть — это тестовый эмулятор,
+  реальных номеров карт тут нет)
 - Таблица `payment_status_history`: payment_id, status, timestamp, note — полная
   история переходов, это и есть "лог", который показывает админка
 - Фоновая asyncio-задача опрашивает платежи в статусе `pending` и переводит их
