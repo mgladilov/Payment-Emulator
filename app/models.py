@@ -37,7 +37,7 @@ class Payment(Base):
     history: Mapped[list["PaymentStatusHistory"]] = relationship(
         back_populates="payment",
         cascade="all, delete-orphan",
-        order_by="PaymentStatusHistory.timestamp",
+        order_by="PaymentStatusHistory.timestamp, PaymentStatusHistory.id",
     )
 
 

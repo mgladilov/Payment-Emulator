@@ -55,7 +55,11 @@ async def pay(
         currency=payload.currency,
         idempotency_key=idempotency_key,
     )
-    return PayResponse(payment_id=payment.id, status=payment.status, scenario=payment.scenario)
+    # /pay — это подтверждение приёма: всегда "accepted". Реальный исход
+    # (success/failed/pending → …) узнаётся через GET /status/{id}.
+    return PayResponse(
+        payment_id=payment.id, status=scenarios.ACCEPTED_STATUS, scenario=payment.scenario
+    )
 
 
 @router.get("/status/{payment_id}", response_model=StatusResponse)

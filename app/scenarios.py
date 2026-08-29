@@ -14,6 +14,10 @@
 """
 from dataclasses import dataclass
 
+# Статус-подтверждение приёма платежа (ответ /pay). Не хранится как рабочее
+# состояние платежа — это первый шаг истории и то, что отдаёт /pay.
+ACCEPTED_STATUS = "accepted"
+
 # Финальные статусы — из них фоновая задача уже не двигает платёж.
 FINAL_STATUSES = {"success", "failed", "unknown"}
 

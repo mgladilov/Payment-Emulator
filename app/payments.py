@@ -50,10 +50,15 @@ async def create_payment(
         idempotency_key=idempotency_key,
         scenario=sc.key,
     )
+    # Первый шаг истории — приём платежа (это и есть ответ /pay: "accepted").
+    payment.history.append(
+        PaymentStatusHistory(status=scenarios.ACCEPTED_STATUS, note="Платёж принят (/pay)")
+    )
+    # Второй шаг — исход по сценарию: либо сразу финальный, либо pending в ожидании.
     note = (
-        "Создан платёж, финальный статус сразу"
+        "Мгновенный исход по сценарию"
         if sc.initial_status in scenarios.FINAL_STATUSES
-        else f"Создан платёж, ожидает перехода ({sc.initial_status})"
+        else "Ожидает автоперехода (pending)"
     )
     payment.history.append(PaymentStatusHistory(status=sc.initial_status, note=note))
     session.add(payment)
