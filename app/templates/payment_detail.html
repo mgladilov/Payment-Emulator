@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Платёж {{ payment.id[:8] }} — Payment Emulator{% endblock %}
+{% block content %}
+<p><a href="/admin/payments">← К списку платежей</a></p>
+<div class="card">
+  <h1>Платёж <code>{{ payment.id }}</code></h1>
+  <dl class="kv">
+    <dt>Реквизит</dt><dd><code>{{ payment.requisite }}</code></dd>
+    <dt>ФИО держателя</dt><dd>{{ holder_name }}</dd>
+    <dt>Сумма</dt><dd>{{ payment.amount | money }} {{ payment.currency }}</dd>
+    <dt>Сценарий</dt><dd>{{ payment.scenario }} <span class="muted">(суффикс {{ payment.requisite_suffix }})</span></dd>
+    <dt>Idempotency-Key</dt><dd><code>{{ payment.idempotency_key }}</code></dd>
+    <dt>Создан</dt><dd>{{ payment.created_at | dt }}</dd>
+    <dt>Обновлён</dt><dd>{{ payment.updated_at | dt }}</dd>
+  </dl>
+
+  <hr style="border:0;border-top:1px solid var(--border);margin:20px 0">
+  {% include "_status_block.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{# Блок статуса + таймлайн. Пока платёж не в финальном статусе, сам себя
+   опрашивает через HTMX каждые 2с. В финале hx-trigger не рендерится —
+   опрос останавливается. #}
+<div id="status-block"
+     {% if not is_final %}hx-get="/admin/payments/{{ payment.id }}/status-block"
+     hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <p>
+    Текущий статус: <span class="badge {{ payment.status }}">{{ payment.status }}</span>
+    {% if is_final %}
+      <span class="muted">— финальный, обновление остановлено</span>
+    {% else %}
+      <span class="muted">— обновляется автоматически…</span>
+    {% endif %}
+  </p>
+
+  <h2>История статусов</h2>
+  <ul class="timeline">
+    {% for h in payment.history %}
+    <li>
+      <span class="ts">{{ h.timestamp | dt }}</span>
+      <span><span class="badge {{ h.status }}">{{ h.status }}</span>
+      {% if h.note %}<span class="muted"> — {{ h.note }}</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>

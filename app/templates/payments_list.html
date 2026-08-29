@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Платежи — Payment Emulator{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Платежи</h1>
+  <form class="filters" method="get" action="/admin/payments">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Поиск по id или реквизиту">
+    <select name="status">
+      <option value="">Все статусы</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Применить</button>
+    <a class="btn secondary" href="/admin/payments" style="text-decoration:none">Сбросить</a>
+    <span class="spacer" style="flex:1"></span>
+    <span class="muted">Найдено: {{ payments|length }}</span>
+  </form>
+
+  {% if payments %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Реквизит</th><th>Сумма</th><th>Сценарий</th><th>Статус</th><th>Создан</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in payments %}
+      <tr>
+        <td><a href="/admin/payments/{{ p.id }}"><code>{{ p.id[:8] }}…</code></a></td>
+        <td><code>{{ p.requisite }}</code></td>
+        <td>{{ p.amount | money }} {{ p.currency }}</td>
+        <td class="muted">{{ p.scenario }}</td>
+        <td><span class="badge {{ p.status }}">{{ p.status }}</span></td>
+        <td class="muted">{{ p.created_at | dt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Платежей не найдено. Инициируйте платёж через <code>POST /pay</code>.</p>
+  {% endif %}
+</div>
+{% endblock %}

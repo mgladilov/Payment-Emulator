@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Настройки задержек — Payment Emulator{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Настройки задержек сценариев</h1>
+  {% if saved %}<div class="flash">Задержки сохранены. Применяются на лету — перезапуск не нужен.</div>{% endif %}
+  <p class="muted">
+    Задержка — через сколько секунд платёж в статусе <code>pending</code> перейдёт
+    в финальный статус сценария. Изменения действуют сразу, в том числе для уже
+    висящих платежей.
+  </p>
+  <form method="post" action="/admin/settings">
+    <table>
+      <thead>
+        <tr><th>Суффикс</th><th>Сценарий</th><th>Переход</th><th>Задержка, сек</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><code>{{ row.suffix }}</code></td>
+          <td>{{ row.description }}</td>
+          <td class="muted">pending → {{ row.final_status }}</td>
+          <td><input type="number" name="delay_{{ row.suffix }}" value="{{ row.delay_seconds }}" min="0" max="3600" style="width:100px"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p><button type="submit">Сохранить</button></p>
+  </form>
+</div>
+{% endblock %}

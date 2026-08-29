@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Payment Emulator{% endblock %}</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7f9; --card: #fff; --ink: #1c2430; --muted: #6b7280;
+      --border: #e5e7eb; --accent: #2563eb; --accent-ink: #fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink); background: var(--bg); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header.topbar { background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 12px 20px; display: flex; align-items: center; gap: 20px; }
+    header.topbar .brand { font-weight: 700; }
+    header.topbar nav { display: flex; gap: 16px; }
+    header.topbar .spacer { flex: 1; }
+    main { max-width: 1000px; margin: 24px auto; padding: 0 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    h2 { font-size: 16px; margin: 20px 0 10px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+    tr:hover td { background: #fafbfc; }
+    input, select, button { font: inherit; }
+    input[type=text], input[type=password], input[type=number], select {
+      padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    button, .btn { padding: 8px 14px; border: 1px solid var(--accent); background: var(--accent);
+      color: var(--accent-ink); border-radius: 8px; cursor: pointer; }
+    button.secondary { background: #fff; color: var(--ink); border-color: var(--border); }
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .muted { color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge.accepted { background: #e0e7ff; color: #3730a3; }
+    .badge.pending  { background: #fef3c7; color: #92400e; }
+    .badge.success  { background: #d1fae5; color: #065f46; }
+    .badge.failed   { background: #fee2e2; color: #991b1b; }
+    .badge.unknown  { background: #e5e7eb; color: #374151; }
+    .timeline { list-style: none; padding: 0; margin: 0; }
+    .timeline li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: baseline; }
+    .timeline li:last-child { border-bottom: 0; }
+    .timeline .ts { color: var(--muted); font-size: 12px; min-width: 170px; }
+    .flash { background: #d1fae5; color: #065f46; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+    .error { background: #fee2e2; color: #991b1b; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+    .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 16px; }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; }
+  </style>
+</head>
+<body>
+  {% if admin_user %}
+  <header class="topbar">
+    <span class="brand">💳 Payment Emulator</span>
+    <nav>
+      <a href="/admin/payments">Платежи</a>
+      <a href="/admin/settings">Настройки задержек</a>
+    </nav>
+    <span class="spacer"></span>
+    <span class="muted">{{ admin_user }}</span>
+    <a href="/admin/logout">Выйти</a>
+  </header>
+  {% endif %}
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
