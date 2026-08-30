@@ -12,11 +12,11 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app import scenarios
 from app.database import async_session_maker
-from app.models import Payment, PaymentStatusHistory, ScenarioSetting
+from app.models import Payment, PaymentStatusHistory, ScenarioSetting, utcnow
 
 logger = logging.getLogger("payment_emulator.background")
 
@@ -54,7 +54,17 @@ async def process_pending_once() -> int:
             if now < deadline:
                 continue
 
-            payment.status = sc.final_status
+            # Атомарный переход: обновляем строку только если она всё ещё pending.
+            # Гарантирует ровно один переход, даже если случайно запущены два
+            # экземпляра (второй получит rowcount=0 и не запишет дубль истории).
+            result = await session.execute(
+                update(Payment)
+                .where(Payment.id == payment.id, Payment.status == "pending")
+                .values(status=sc.final_status, updated_at=utcnow())
+            )
+            if result.rowcount != 1:
+                continue  # перевёл кто-то другой — ничего не пишем
+
             # Пишем историю напрямую (не через payment.history), чтобы не
             # триггерить ленивую подгрузку коллекции в async-контексте.
             session.add(
@@ -64,6 +74,7 @@ async def process_pending_once() -> int:
                     note=f"Автопереход pending → {sc.final_status} (задержка {delay}s, сценарий {sc.key})",
                 )
             )
+            await session.commit()
             logger.info(
                 "payment=%s автопереход pending → %s (задержка %ss, сценарий %s)",
                 payment.id,
@@ -72,9 +83,6 @@ async def process_pending_once() -> int:
                 sc.key,
             )
             transitioned += 1
-
-        if transitioned:
-            await session.commit()
 
     return transitioned
 

@@ -5,13 +5,18 @@
 """
 import json
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.logging_config import get_logger
 from app.models import ApiRequestLog
 
 _logger = get_logger("api")
+
+# Ретеншен: держим только последние RETENTION записей, чистку запускаем не на
+# каждый вызов, а раз в PRUNE_EVERY вставок (дешёвый DELETE по диапазону PK).
+RETENTION = 5000
+PRUNE_EVERY = 200
 
 
 def _pretty(data) -> str | None:
@@ -30,6 +35,17 @@ def _compact(data) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
 
 
+async def _maybe_prune(session: AsyncSession, latest_id: int | None) -> None:
+    """Изредка подрезать таблицу до RETENTION последних записей."""
+    if latest_id is None or latest_id % PRUNE_EVERY != 0:
+        return
+    cutoff = latest_id - RETENTION
+    if cutoff <= 0:
+        return
+    await session.execute(delete(ApiRequestLog).where(ApiRequestLog.id <= cutoff))
+    await session.commit()
+
+
 async def log_api_call(
     session: AsyncSession,
     *,
@@ -43,20 +59,8 @@ async def log_api_call(
     payment_id: str | None = None,
     requisite: str | None = None,
 ) -> None:
-    session.add(
-        ApiRequestLog(
-            endpoint=endpoint,
-            method=method,
-            path=path,
-            status_code=status_code,
-            client=client,
-            payment_id=payment_id,
-            requisite=requisite,
-            request_body=_pretty(request_data),
-            response_body=_pretty(response_data),
-        )
-    )
-    await session.commit()
+    # Общий файловый лог пишем всегда — это durable-канал, он не должен зависеть
+    # от успеха записи в БД.
     _logger.info(
         "%s %s [%s] client=%s req=%s resp=%s",
         method,
@@ -66,6 +70,25 @@ async def log_api_call(
         _compact(request_data),
         _compact(response_data),
     )
+    row = ApiRequestLog(
+        endpoint=endpoint,
+        method=method,
+        path=path,
+        status_code=status_code,
+        client=client,
+        payment_id=payment_id,
+        requisite=requisite,
+        request_body=_pretty(request_data),
+        response_body=_pretty(response_data),
+    )
+    session.add(row)
+    try:
+        await session.commit()
+    except Exception:  # noqa: BLE001 — логирование не должно ронять сам запрос
+        await session.rollback()
+        _logger.warning("Не удалось сохранить api-лог для %s %s", method, path, exc_info=True)
+        return
+    await _maybe_prune(session, row.id)
 
 
 async def list_for_payment(session: AsyncSession, payment_id: str, limit: int = 200) -> list[ApiRequestLog]:

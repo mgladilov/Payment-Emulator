@@ -47,10 +47,16 @@ app = FastAPI(title="Payment Emulator", version="0.5.0", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 
 
+# Пути, которые не пишем в общий лог: статика, health-проба и HTMX-поллеры
+# админки (они дёргаются каждые 2-3с и только зашумляют файл).
+def _skip_request_log(path: str) -> bool:
+    return path.startswith("/static") or path == "/health" or path.endswith("-block")
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Общий лог всех HTTP-запросов (пишется в файл logs/emulator-<дата>.log)."""
-    if request.url.path.startswith("/static"):
+    """Общий лог HTTP-запросов (пишется в файл logs/emulator-<дата>.log)."""
+    if _skip_request_log(request.url.path):
         return await call_next(request)
     start = time.perf_counter()
     response = await call_next(request)

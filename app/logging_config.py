@@ -7,13 +7,15 @@
 """
 import logging
 import os
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOGGER_NAME = "payment_emulator"
+# Время везде в UTC — чтобы файловый лог сходился с метками в БД (тоже UTC).
 _FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
-_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_DATEFMT = "%Y-%m-%d %H:%M:%S UTC"
 
 
 class DailyFileHandler(logging.FileHandler):
@@ -27,7 +29,7 @@ class DailyFileHandler(logging.FileHandler):
 
     @staticmethod
     def _today() -> str:
-        return datetime.now().strftime("%Y-%m-%d")
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     def _path_for(self, date_str: str) -> str:
         return str(self._log_dir / f"emulator-{date_str}.log")
@@ -54,6 +56,7 @@ def setup_logging() -> logging.Logger:
         return logger
 
     formatter = logging.Formatter(_FORMAT, _DATEFMT)
+    formatter.converter = time.gmtime  # asctime в UTC
 
     file_handler = DailyFileHandler(LOG_DIR)
     file_handler.setFormatter(formatter)
