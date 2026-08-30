@@ -8,7 +8,9 @@ from tests.conftest import set_delay
 
 
 async def _pay(agent, requisite, key):
-    r = await agent.post("/pay", headers={"Idempotency-Key": key}, json={"requisite": requisite, "amount": 100})
+    r = await agent.post(
+        "/pay", json={"requisite": requisite, "amount": 100, "idempotency_key": key}
+    )
     return r.json()["payment_id"]
 
 

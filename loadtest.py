@@ -32,8 +32,11 @@ async def worker(client, iterations, samples):
             (
                 client.post(
                     "/pay",
-                    headers={"Idempotency-Key": str(uuid.uuid4())},
-                    json={"requisite": requisite, "amount": 10000},
+                    json={
+                        "requisite": requisite,
+                        "amount": 10000,
+                        "idempotency_key": str(uuid.uuid4()),
+                    },
                 ),
                 "pay",
             ),

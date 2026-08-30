@@ -37,7 +37,11 @@ class CheckResponse(BaseModel):
 
 
 class PayRequest(CheckRequest):
-    """Тело /pay совпадает с /check. Idempotency-Key передаётся заголовком."""
+    """Тело /pay: реквизиты + ключ идемпотентности (передаётся в теле, не в заголовке)."""
+
+    idempotency_key: str = Field(
+        ..., min_length=1, max_length=128, description="Ключ идемпотентности; повтор с тем же ключом возвращает тот же платёж"
+    )
 
 
 class PayResponse(BaseModel):

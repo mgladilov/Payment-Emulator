@@ -1,8 +1,6 @@
 """Интеграционные тесты агентского API: /check, /pay, /status, auth, идемпотентность."""
 import uuid
 
-PAY_HEADERS = {"Idempotency-Key": "test-key"}
-
 
 # --- auth ---
 
@@ -63,7 +61,8 @@ async def test_requisite_needs_digits(agent):
 
 async def test_pay_returns_accepted(agent):
     r = await agent.post(
-        "/pay", headers=PAY_HEADERS, json={"requisite": "4111111111110001", "amount": 100}
+        "/pay",
+        json={"requisite": "4111111111110001", "amount": 100, "idempotency_key": "test-key"},
     )
     assert r.status_code == 201
     assert r.json()["status"] == "accepted"  # не раскрывает исход
@@ -75,10 +74,9 @@ async def test_pay_requires_idempotency_key(agent):
 
 
 async def test_pay_is_idempotent(agent):
-    key = {"Idempotency-Key": str(uuid.uuid4())}
-    body = {"requisite": "4111111111110003", "amount": 500}
-    r1 = await agent.post("/pay", headers=key, json=body)
-    r2 = await agent.post("/pay", headers=key, json=body)
+    body = {"requisite": "4111111111110003", "amount": 500, "idempotency_key": str(uuid.uuid4())}
+    r1 = await agent.post("/pay", json=body)
+    r2 = await agent.post("/pay", json=body)
     assert r1.json()["payment_id"] == r2.json()["payment_id"]
 
 
@@ -92,7 +90,7 @@ async def test_status_404_for_unknown(agent):
 async def test_instant_success_visible_via_status(agent):
     pid = (
         await agent.post(
-            "/pay", headers={"Idempotency-Key": "s1"}, json={"requisite": "4111111111110001", "amount": 100}
+            "/pay", json={"requisite": "4111111111110001", "amount": 100, "idempotency_key": "s1"}
         )
     ).json()["payment_id"]
     r = await agent.get(f"/status/{pid}")
@@ -102,7 +100,7 @@ async def test_instant_success_visible_via_status(agent):
 async def test_instant_decline_visible_via_status(agent):
     pid = (
         await agent.post(
-            "/pay", headers={"Idempotency-Key": "s2"}, json={"requisite": "4111111111110002", "amount": 100}
+            "/pay", json={"requisite": "4111111111110002", "amount": 100, "idempotency_key": "s2"}
         )
     ).json()["payment_id"]
     assert (await agent.get(f"/status/{pid}")).json()["status"] == "failed"
@@ -111,7 +109,7 @@ async def test_instant_decline_visible_via_status(agent):
 async def test_delayed_starts_pending(agent):
     pid = (
         await agent.post(
-            "/pay", headers={"Idempotency-Key": "s3"}, json={"requisite": "4111111111110003", "amount": 100}
+            "/pay", json={"requisite": "4111111111110003", "amount": 100, "idempotency_key": "s3"}
         )
     ).json()["payment_id"]
     assert (await agent.get(f"/status/{pid}")).json()["status"] == "pending"

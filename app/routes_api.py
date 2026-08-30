@@ -1,5 +1,5 @@
 """Агентское API: /check, /pay, /status. Защищено HTTP Basic Auth."""
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import api_logs, holder, payments, scenarios
@@ -63,10 +63,9 @@ async def check(
 async def pay(
     payload: PayRequest,
     request: Request,
-    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1),
     session: AsyncSession = Depends(get_session),
 ) -> PayResponse:
-    """Инициировать платёж. Требует заголовок Idempotency-Key.
+    """Инициировать платёж. Ключ идемпотентности передаётся в теле (idempotency_key).
 
     Повторный вызов с тем же ключом возвращает тот же платёж, не создавая новый.
     """
@@ -75,14 +74,13 @@ async def pay(
         requisite=payload.requisite,
         amount=payload.amount,
         currency=payload.currency,
-        idempotency_key=idempotency_key,
+        idempotency_key=payload.idempotency_key,
     )
     # /pay — это подтверждение приёма: всегда "accepted". Реальный исход
     # (success/failed/pending → …) узнаётся через GET /status/{id}.
     response = PayResponse(
         payment_id=payment.id, status=scenarios.ACCEPTED_STATUS, scenario=payment.scenario
     )
-    request_data = {**payload.model_dump(mode="json"), "Idempotency-Key": idempotency_key}
     await api_logs.log_api_call(
         session,
         endpoint="pay",
@@ -90,7 +88,7 @@ async def pay(
         path="/pay",
         status_code=201,
         client=_client(request),
-        request_data=request_data,
+        request_data=payload.model_dump(mode="json"),
         response_data=response.model_dump(mode="json"),
         payment_id=payment.id,
         requisite=payload.requisite,

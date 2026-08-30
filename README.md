@@ -73,9 +73,10 @@ python3.12 -m venv .venv
 - `POST /check` — проверка реквизитов без создания платежа. Результат в поле
   `status` (`allowed` | `declined`), HTTP всегда 200. Возвращает также
   `holder_name` (ФИО, детерминированно по реквизиту) и эхо `currency`.
-- `POST /pay` — инициирует платёж. Обязателен заголовок `Idempotency-Key`
-  (повтор с тем же ключом возвращает тот же платёж). Ответ — подтверждение
-  приёма `status: "accepted"`; реальный исход узнаётся через `/status`.
+- `POST /pay` — инициирует платёж. Обязательно поле `idempotency_key` в теле
+  запроса (повтор с тем же ключом возвращает тот же платёж). Ответ —
+  подтверждение приёма `status: "accepted"`; реальный исход узнаётся через
+  `/status`.
 - `GET /status/{payment_id}` — текущий статус платежа.
 
 ### Админка (сессионная авторизация)
@@ -146,10 +147,10 @@ curl -u agent:agent-secret -X POST localhost:8000/check \
   -H "Content-Type: application/json" \
   -d '{"requisite":"4111111111110001","amount":10000,"currency":"RUB"}'
 
-# pay (нужен Idempotency-Key); amount — в минимальных единицах (10000 = 100.00)
+# pay (idempotency_key — в теле); amount — в минимальных единицах (10000 = 100.00)
 curl -u agent:agent-secret -X POST localhost:8000/pay \
-  -H "Content-Type: application/json" -H "Idempotency-Key: demo-1" \
-  -d '{"requisite":"4111111111110003","amount":10000}'
+  -H "Content-Type: application/json" \
+  -d '{"requisite":"4111111111110003","amount":10000,"idempotency_key":"demo-1"}'
 
 # status
 curl -u agent:agent-secret localhost:8000/status/<payment_id>

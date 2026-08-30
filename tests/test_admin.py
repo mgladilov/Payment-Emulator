@@ -33,7 +33,7 @@ async def test_requests_page_shows_check(client, agent):
 async def test_payment_detail_shows_logs(client, agent):
     pid = (
         await agent.post(
-            "/pay", headers={"Idempotency-Key": "a1"}, json={"requisite": "4111111111110001", "amount": 100}
+            "/pay", json={"requisite": "4111111111110001", "amount": 100, "idempotency_key": "a1"}
         )
     ).json()["payment_id"]
     await agent.get(f"/status/{pid}")

@@ -26,7 +26,7 @@ async def test_check_is_logged_without_payment(agent):
 async def test_pay_and_status_logged_with_payment_id(agent):
     pid = (
         await agent.post(
-            "/pay", headers={"Idempotency-Key": "l1"}, json={"requisite": "4111111111110001", "amount": 100}
+            "/pay", json={"requisite": "4111111111110001", "amount": 100, "idempotency_key": "l1"}
         )
     ).json()["payment_id"]
     await agent.get(f"/status/{pid}")
@@ -34,7 +34,7 @@ async def test_pay_and_status_logged_with_payment_id(agent):
     pay_rows = await _logs("pay")
     status_rows = await _logs("status")
     assert pay_rows[0].payment_id == pid
-    assert "Idempotency-Key" in pay_rows[0].request_body  # заголовок попал в лог запроса
+    assert "idempotency_key" in pay_rows[0].request_body  # ключ из тела попал в лог запроса
     assert status_rows[0].payment_id == pid
     assert "success" in status_rows[0].response_body
 
