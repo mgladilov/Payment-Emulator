@@ -1,4 +1,4 @@
-# Payment Emulator — гайд для Claude Code
+# Payment Emulator — гайд по проекту
 
 Эмулятор платёжного провайдера (PSP mock) для тренировки агентов. **Деньги нигде
 не двигаются** — это HTTP API, детерминированно возвращающее сценарии по тестовым
@@ -8,7 +8,9 @@
 ## Стек
 
 - **FastAPI** (Python 3.12+), всё в одном процессе
-- **SQLite** через async **SQLAlchemy 2.0** (`aiosqlite`), один файл `emulator.db`
+- **SQLite** через async **SQLAlchemy 2.0** (`aiosqlite`), один файл `emulator.db`,
+  режим **WAL** (чтения админки не блокируются записью запросов; `busy_timeout`
+  вместо мгновенной ошибки блокировки) — см. [app/database.py](app/database.py)
 - **Админка**: серверный рендеринг **Jinja2** + **HTMX** (вендорится локально в
   `app/static/htmx.min.js`, без npm/CDN)
 - **Auth**: HTTP Basic Auth для агентского API; сессионные куки для админки
@@ -29,6 +31,23 @@ python3.12 -m venv .venv
 Креды и секреты меняются через переменные окружения или `.env` (см.
 [app/config.py](app/config.py)): `API_USERNAME`, `API_PASSWORD`,
 `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `DATABASE_URL`.
+
+## Тесты и нагрузка
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest                 # автотесты (изолированная БД)
+```
+
+Тесты (`tests/`) гоняются на отдельном файле SQLite: юниты на сценарии/ФИО и
+интеграционные (httpx поверх ASGI) на агентское API, идемпотентность, атомарный
+переход, логирование и админку.
+
+Нагрузочный тест против запущенного сервера:
+
+```bash
+.venv/bin/python loadtest.py --url http://127.0.0.1:8000 --concurrency 30 --iterations 20
+```
 
 ## Сценарии по суффиксу реквизита
 
