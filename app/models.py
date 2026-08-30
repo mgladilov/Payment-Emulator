@@ -3,6 +3,10 @@
 Payment              — созданные платежи (реквизит хранится как есть: это
                        тестовый эмулятор, реальных номеров карт тут нет).
 PaymentStatusHistory — полная история переходов статусов (это и есть "лог").
+ApiRequestLog        — полный лог агентских API-запросов: тело запроса и наш
+                       ответ. Для /pay и /status привязан к payment_id, для
+                       /check — нет (платёж не создаётся). Показывается в окне на
+                       странице платежа и на общей странице /admin/requests.
 ScenarioSetting      — настраиваемые задержки по суффиксу реквизита, редактируются
                        через админку без перезапуска приложения.
 AdminUser            — seed-админ(ы) для сессионной авторизации.
@@ -51,6 +55,25 @@ class PaymentStatusHistory(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     payment: Mapped["Payment"] = relationship(back_populates="history")
+
+
+class ApiRequestLog(Base):
+    __tablename__ = "api_request_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    endpoint: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # check|pay|status
+    method: Mapped[str] = mapped_column(String(10), nullable=False)
+    path: Mapped[str] = mapped_column(String(255), nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    client: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # payment_id пуст для /check (платёж не создаётся); заполнен для /pay и /status.
+    payment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    requisite: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    request_body: Mapped[str | None] = mapped_column(Text, nullable=True)   # что прислал агент (JSON)
+    response_body: Mapped[str | None] = mapped_column(Text, nullable=True)  # что ответили мы (JSON)
 
 
 class ScenarioSetting(Base):

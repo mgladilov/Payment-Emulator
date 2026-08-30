@@ -28,6 +28,9 @@ emulator.db-shm
 .env.*
 !.env.example
 
+# Application logs (daily-rotated files)
+logs/
+
 # Tooling caches
 .pytest_cache/
 .mypy_cache/

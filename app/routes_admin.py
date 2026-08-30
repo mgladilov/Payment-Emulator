@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import holder, scenarios
+from app import api_logs, holder, scenarios
 from app.admin_auth import SESSION_KEY, authenticate_admin, require_admin
 from app.database import get_session
 from app.models import Payment, ScenarioSetting
@@ -104,6 +104,7 @@ async def payment_detail(
     session: AsyncSession = Depends(get_session),
 ):
     payment = await _load_payment(session, payment_id)
+    logs = await api_logs.list_for_payment(session, payment_id)
     return templates.TemplateResponse(
         request,
         "payment_detail.html",
@@ -112,6 +113,7 @@ async def payment_detail(
             "payment": payment,
             "holder_name": holder.holder_name(payment.requisite),
             "is_final": payment.status in scenarios.FINAL_STATUSES,
+            "logs": logs,
         },
     )
 
@@ -129,6 +131,51 @@ async def payment_status_block(
         request,
         "_status_block.html",
         {"payment": payment, "is_final": payment.status in scenarios.FINAL_STATUSES},
+    )
+
+
+@router.get("/payments/{payment_id}/logs-block", response_class=HTMLResponse)
+async def payment_logs_block(
+    request: Request,
+    payment_id: str,
+    admin: str = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    """HTMX-partial: окно логов платежа; опрашивает себя, пока платёж не финален."""
+    payment = await _load_payment(session, payment_id)
+    logs = await api_logs.list_for_payment(session, payment_id)
+    return templates.TemplateResponse(
+        request,
+        "_logs_block.html",
+        {
+            "payment": payment,
+            "logs": logs,
+            "is_final": payment.status in scenarios.FINAL_STATUSES,
+        },
+    )
+
+
+# --- Общий журнал API-запросов -------------------------------------------
+
+@router.get("/requests", response_class=HTMLResponse)
+async def api_requests(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+    endpoint: str | None = None,
+    q: str | None = None,
+):
+    logs = await api_logs.list_all(session, endpoint=endpoint, q=q)
+    return templates.TemplateResponse(
+        request,
+        "requests.html",
+        {
+            "admin_user": admin,
+            "logs": logs,
+            "endpoints": ["check", "pay", "status"],
+            "endpoint": endpoint,
+            "q": q,
+        },
     )
 
 

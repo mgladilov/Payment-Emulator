@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}API-запросы — Payment Emulator{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Журнал API-запросов</h1>
+  <p class="muted">Все агентские запросы (<code>/check</code>, <code>/pay</code>, <code>/status</code>)
+    с полным телом запроса и нашего ответа. <code>/check</code> платёж не создаёт, поэтому виден только здесь.</p>
+  <form class="filters" method="get" action="/admin/requests">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Поиск по реквизиту / payment_id / пути">
+    <select name="endpoint">
+      <option value="">Все эндпоинты</option>
+      {% for e in endpoints %}
+      <option value="{{ e }}" {% if e == endpoint %}selected{% endif %}>{{ e }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Применить</button>
+    <a class="btn secondary" href="/admin/requests" style="text-decoration:none">Сбросить</a>
+    <span class="spacer" style="flex:1"></span>
+    <span class="muted">Найдено: {{ logs|length }}</span>
+  </form>
+
+  {% if logs %}
+  <div class="logbox">
+    {% for l in logs %}
+    <div class="logentry">
+      <div class="logline">
+        <span class="ts">{{ l.timestamp | dt }}</span>
+        <span class="endpoint {{ l.endpoint }}">{{ l.endpoint }}</span>
+        <span class="method">{{ l.method }}</span>
+        <code>{{ l.path }}</code>
+        {% if l.status_code %}<span class="code">{{ l.status_code }}</span>{% endif %}
+        <span class="muted">client={{ l.client or '-' }}</span>
+        {% if l.payment_id %}<a class="paylink" href="/admin/payments/{{ l.payment_id }}">платёж {{ l.payment_id[:8] }}…</a>{% endif %}
+      </div>
+      <div class="io"><span class="io-tag req">→ запрос</span>
+        <pre>{{ l.request_body if l.request_body else '(без тела)' }}</pre></div>
+      <div class="io"><span class="io-tag resp">← ответ</span>
+        <pre>{{ l.response_body if l.response_body else '(нет)' }}</pre></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Запросов не найдено.</p>
+  {% endif %}
+</div>
+{% endblock %}

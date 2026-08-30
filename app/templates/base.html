@@ -52,6 +52,28 @@
     .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 16px; }
     .kv dt { color: var(--muted); }
     .kv dd { margin: 0; }
+    .logbox { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px 14px;
+      max-height: 320px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px; line-height: 1.7; }
+    .logbox .logentry { border-bottom: 1px solid #1e293b; padding: 8px 0; }
+    .logbox .logentry:last-child { border-bottom: 0; }
+    .logbox .logline { word-break: break-word; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+    .logbox .ts { color: #64748b; }
+    .logbox .method { color: #a78bfa; font-weight: 600; }
+    .logbox code { color: #86efac; background: transparent; }
+    .logbox .code { color: #94a3b8; }
+    .logbox .muted { color: #64748b; }
+    .logbox .paylink { color: #38bdf8; }
+    .logbox .endpoint { font-weight: 700; padding: 1px 8px; border-radius: 999px; font-size: 11px; text-transform: uppercase; }
+    .logbox .endpoint.check  { background: #164e63; color: #a5f3fc; }
+    .logbox .endpoint.pay    { background: #3730a3; color: #c7d2fe; }
+    .logbox .endpoint.status { background: #065f46; color: #a7f3d0; }
+    .logbox .io { display: flex; gap: 8px; margin: 4px 0 0; }
+    .logbox .io-tag { flex: 0 0 auto; font-size: 11px; font-weight: 700; padding-top: 3px; }
+    .logbox .io-tag.req { color: #fbbf24; }
+    .logbox .io-tag.resp { color: #34d399; }
+    .logbox .io pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #cbd5e1;
+      background: #0b1220; border-radius: 6px; padding: 6px 10px; flex: 1; }
   </style>
 </head>
 <body>
@@ -60,6 +82,7 @@
     <span class="brand">💳 Payment Emulator</span>
     <nav>
       <a href="/admin/payments">Платежи</a>
+      <a href="/admin/requests">API-запросы</a>
       <a href="/admin/settings">Настройки задержек</a>
     </nav>
     <span class="spacer"></span>

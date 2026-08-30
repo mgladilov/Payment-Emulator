@@ -6,6 +6,7 @@
 Фаза 4 — веб-админка (Jinja2 + HTMX) под сессионной авторизацией.
 """
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,13 +19,18 @@ from app.admin_auth import NotAuthenticated
 from app.background import status_transition_loop
 from app.config import settings
 from app.db_init import init_db
+from app.logging_config import get_logger, setup_logging
 from app.routes_admin import router as admin_router
 from app.routes_api import router as api_router
+
+setup_logging()
+_request_logger = get_logger("request")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    _request_logger.parent.info("Payment Emulator запущен")
     stop_event = asyncio.Event()
     task = asyncio.create_task(status_transition_loop(stop_event))
     try:
@@ -32,12 +38,33 @@ async def lifespan(app: FastAPI):
     finally:
         stop_event.set()
         await task
+        _request_logger.parent.info("Payment Emulator остановлен")
 
 
-app = FastAPI(title="Payment Emulator", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Payment Emulator", version="0.5.0", lifespan=lifespan)
 
 # Сессионная кука для админки (агентское API её не использует — там Basic Auth).
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Общий лог всех HTTP-запросов (пишется в файл logs/emulator-<дата>.log)."""
+    if request.url.path.startswith("/static"):
+        return await call_next(request)
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    client = request.client.host if request.client else "-"
+    _request_logger.info(
+        "%s %s -> %s (%.1f ms) client=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        client,
+    )
+    return response
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 

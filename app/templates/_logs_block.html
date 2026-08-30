@@ -1,0 +1,25 @@
+{# Окно API-запросов по платежу: заголовок + полное тело запроса и ответа.
+   Пока платёж не финален — обновляется по HTMX каждые 3с. #}
+<div id="logs-block"
+     {% if not is_final %}hx-get="/admin/payments/{{ payment.id }}/logs-block"
+     hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  <div class="logbox">
+    {% for l in logs %}
+    <div class="logentry">
+      <div class="logline">
+        <span class="ts">{{ l.timestamp | dt }}</span>
+        <span class="method">{{ l.method }}</span>
+        <code>{{ l.path }}</code>
+        {% if l.status_code %}<span class="code">{{ l.status_code }}</span>{% endif %}
+        <span class="muted">client={{ l.client or '-' }}</span>
+      </div>
+      <div class="io"><span class="io-tag req">→ запрос</span>
+        <pre>{{ l.request_body if l.request_body else '(без тела)' }}</pre></div>
+      <div class="io"><span class="io-tag resp">← ответ</span>
+        <pre>{{ l.response_body if l.response_body else '(нет)' }}</pre></div>
+    </div>
+    {% else %}
+    <div class="muted">Пока нет запросов по этому платежу.</div>
+    {% endfor %}
+  </div>
+</div>

@@ -64,6 +64,13 @@ async def process_pending_once() -> int:
                     note=f"Автопереход pending → {sc.final_status} (задержка {delay}s, сценарий {sc.key})",
                 )
             )
+            logger.info(
+                "payment=%s автопереход pending → %s (задержка %ss, сценарий %s)",
+                payment.id,
+                sc.final_status,
+                delay,
+                sc.key,
+            )
             transitioned += 1
 
         if transitioned:
