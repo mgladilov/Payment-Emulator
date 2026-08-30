@@ -35,6 +35,9 @@ emulator.db-shm
 .coverage
 htmlcov/
 
+# graphify build output (knowledge graph, report, cache)
+graphify-out/
+
 # IDE
 .idea/
 .vscode/
