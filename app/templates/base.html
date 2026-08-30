@@ -93,5 +93,32 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script>
+    // Метки времени приходят с сервера в UTC (<time datetime="...Z" data-utc>).
+    // Показываем их в локальной зоне браузера пользователя.
+    (function () {
+      var pad = function (n) { return String(n).padStart(2, "0"); };
+      function fmtLocal(iso) {
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return null;
+        var off = -d.getTimezoneOffset();               // минуты к востоку от UTC
+        var oa = Math.abs(off);
+        var tz = "UTC" + (off >= 0 ? "+" : "-") + pad(Math.floor(oa / 60)) +
+                 (oa % 60 ? ":" + pad(oa % 60) : "");
+        return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+               " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) +
+               " " + tz;
+      }
+      function localize(root) {
+        (root || document).querySelectorAll("time[data-utc]").forEach(function (el) {
+          var s = fmtLocal(el.getAttribute("datetime"));
+          if (s) { el.textContent = s; el.removeAttribute("data-utc"); }
+        });
+      }
+      document.addEventListener("DOMContentLoaded", function () { localize(); });
+      // HTMX подгружает блоки статуса/логов поллингом — локализуем и их.
+      document.body.addEventListener("htmx:afterSwap", function (e) { localize(e.target); });
+    })();
+  </script>
 </body>
 </html>
