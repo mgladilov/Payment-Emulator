@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Мой аккаунт — Payment Emulator{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 460px;">
+  <h1>Мой аккаунт: <code>{{ admin_user }}</code></h1>
+  {% if flash %}<div class="{{ 'error' if flash.error else 'flash' }}">{{ flash.text }}</div>{% endif %}
+  <h2>Смена пароля</h2>
+  <form method="post" action="/admin/account/password">
+    <p><label>Текущий пароль<br>
+      <input type="password" name="current_password" required autocomplete="current-password" style="width:100%"></label></p>
+    <p><label>Новый пароль (минимум {{ min_len }} символов)<br>
+      <input type="password" name="new_password" required minlength="{{ min_len }}" autocomplete="new-password" style="width:100%"></label></p>
+    <p><label>Новый пароль ещё раз<br>
+      <input type="password" name="new_password2" required minlength="{{ min_len }}" autocomplete="new-password" style="width:100%"></label></p>
+    <button type="submit">Сменить пароль</button>
+  </form>
+</div>
+{% endblock %}

@@ -14,13 +14,18 @@ class Settings(BaseSettings):
     # Применять миграции Alembic при старте приложения (alembic upgrade head).
     auto_migrate: bool = True
 
-    # HTTP Basic Auth для агентского API (/check, /pay, /status, /api/*)
+    # Первая агентская учётка (HTTP Basic Auth для /check, /pay, /status, /api/*).
+    # Создаётся, только если агентов в БД нет; дальше — управление в админке.
     api_username: str = "agent"
     api_password: str = "agent-secret"
 
-    # Seed-админ для веб-админки (сессионная авторизация)
+    # Первый админ веб-админки. Создаётся, только если админов в БД нет;
+    # пароль затем меняется в админке, эти значения больше не читаются.
     admin_username: str = "admin"
     admin_password: str = "admin"
+
+    # Стоимость bcrypt для паролей (4..31). Тесты ставят 4 ради скорости.
+    bcrypt_rounds: int = 12
 
     # Ключ подписи сессионной куки
     session_secret: str = "dev-only-change-me"

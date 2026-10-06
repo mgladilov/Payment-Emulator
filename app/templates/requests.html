@@ -7,7 +7,7 @@
     и выдачи (<code>/api/v2/check</code>, <code>/api/block</code>, <code>/api/pay</code>) — с полным телом
     запроса и нашего ответа. <code>/check</code> платёж не создаёт, поэтому виден только здесь.</p>
   <form class="filters" method="get" action="/admin/requests">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="Поиск по реквизиту / PIN / payment_id / пути">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Поиск по реквизиту / PIN / payment_id / пути / агенту">
     <select name="endpoint">
       <option value="">Все эндпоинты</option>
       {% for e in endpoints %}
@@ -31,6 +31,7 @@
         <code>{{ l.path }}</code>
         {% if l.status_code %}<span class="code">{{ l.status_code }}</span>{% endif %}
         <span class="muted">client={{ l.client or '-' }}</span>
+        {% if l.agent %}<span class="muted">agent={{ l.agent }}</span>{% endif %}
         {% if l.payment_id %}<a class="paylink" href="/admin/payments/{{ l.payment_id }}">платёж {{ l.payment_id[:8] }}…</a>{% endif %}
         {% if l.endpoint.startswith('payout_') and l.requisite %}<a class="paylink" href="/admin/payouts?q={{ l.requisite | urlencode }}">код {{ l.requisite }}</a>{% endif %}
       </div>

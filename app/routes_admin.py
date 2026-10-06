@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import api_logs, holder, payout_scenarios, payouts, scenarios
-from app.admin_auth import SESSION_KEY, authenticate_admin, require_admin
+from app.admin_auth import SESSION_KEY, authenticate_admin, login_session, require_admin
 from app.database import get_session
 from app.models import Payment, PayoutCode, ScenarioSetting, utcnow
 from app.templating import templates
@@ -55,7 +55,7 @@ async def login_submit(
         return templates.TemplateResponse(
             request, "login.html", {"error": "Неверный логин или пароль"}, status_code=401
         )
-    request.session[SESSION_KEY] = user.username
+    login_session(request, user)
     return RedirectResponse("/admin/payments", status_code=status.HTTP_303_SEE_OTHER)
 
 

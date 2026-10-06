@@ -54,6 +54,7 @@ async def log_api_call(
     path: str,
     status_code: int | None,
     client: str | None = None,
+    agent: str | None = None,
     request_data=None,
     response_data=None,
     payment_id: str | None = None,
@@ -62,11 +63,12 @@ async def log_api_call(
     # Общий файловый лог пишем всегда — это durable-канал, он не должен зависеть
     # от успеха записи в БД.
     _logger.info(
-        "%s %s [%s] client=%s req=%s resp=%s",
+        "%s %s [%s] client=%s agent=%s req=%s resp=%s",
         method,
         path,
         status_code,
         client or "-",
+        agent or "-",
         _compact(request_data),
         _compact(response_data),
     )
@@ -76,6 +78,7 @@ async def log_api_call(
         path=path,
         status_code=status_code,
         client=client,
+        agent=agent,
         payment_id=payment_id,
         requisite=requisite,
         request_body=_pretty(request_data),
@@ -115,6 +118,7 @@ async def list_all(
             ApiRequestLog.requisite.like(like)
             | ApiRequestLog.payment_id.like(like)
             | ApiRequestLog.path.like(like)
+            | ApiRequestLog.agent.like(like)
         )
     return list((await session.scalars(stmt.limit(limit))).all())
 

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import api_logs, holder, payments, scenarios
-from app.api_auth import require_api_auth
+from app.api_auth import current_agent, require_api_auth
 from app.database import get_session
 from app.schemas import (
     CheckRequest,
@@ -52,6 +52,7 @@ async def check(
         path="/check",
         status_code=200,
         client=_client(request),
+        agent=current_agent(request),
         request_data=payload.model_dump(mode="json"),
         response_data=response.model_dump(mode="json"),
         requisite=payload.requisite,
@@ -88,6 +89,7 @@ async def pay(
         path="/pay",
         status_code=201,
         client=_client(request),
+        agent=current_agent(request),
         request_data=payload.model_dump(mode="json"),
         response_data=response.model_dump(mode="json"),
         payment_id=payment.id,
@@ -123,6 +125,7 @@ async def get_status(
         path=f"/status/{payment_id}",
         status_code=200,
         client=_client(request),
+        agent=current_agent(request),
         request_data=None,  # GET без тела
         response_data=response.model_dump(mode="json"),
         payment_id=payment.id,

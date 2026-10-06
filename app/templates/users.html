@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Пользователи — Payment Emulator{% endblock %}
+{% block content %}
+{% if flash %}
+<div class="{{ 'error' if flash.error else 'flash' }}">
+  {{ flash.text }}
+  {% if flash.secret %}
+  <div style="margin-top:8px">Пароль показывается <strong>один раз</strong> — скопируйте сейчас:</div>
+  <div class="pins">{{ flash.secret.username }}:{{ flash.secret.password }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card" style="margin-bottom: 20px;">
+  <h1>Агенты API</h1>
+  <p class="muted">Учётки HTTP Basic Auth для <code>/check</code>, <code>/pay</code>, <code>/status</code> и
+    <code>/api/*</code>. Отключение и смена пароля действуют сразу.</p>
+  {% if agents %}
+  <table>
+    <thead><tr><th>Логин</th><th>Описание</th><th>Статус</th><th>Создан</th><th>Действия</th></tr></thead>
+    <tbody>
+      {% for a in agents %}
+      <tr>
+        <td><code>{{ a.username }}</code></td>
+        <td class="muted">{{ a.description or '—' }}</td>
+        <td><span class="badge {{ 'active' if a.is_active else 'expired' }}">{{ 'активен' if a.is_active else 'отключён' }}</span></td>
+        <td class="muted">{{ a.created_at | dt }}</td>
+        <td>
+          <div class="actions">
+            <details>
+              <summary class="linkish">Пароль</summary>
+              <form method="post" action="/admin/users/agents/{{ a.id }}/password" class="actions" style="margin-top:6px">
+                <input type="password" name="password" placeholder="пусто = сгенерировать" autocomplete="new-password" minlength="{{ min_len }}">
+                <button type="submit" class="secondary">Сменить</button>
+              </form>
+            </details>
+            <form method="post" action="/admin/users/agents/{{ a.id }}/toggle">
+              <button type="submit" class="secondary">{{ 'Отключить' if a.is_active else 'Включить' }}</button>
+            </form>
+            <form method="post" action="/admin/users/agents/{{ a.id }}/delete"
+                  onsubmit="return confirm('Удалить агента {{ a.username }}?')">
+              <button type="submit" class="secondary danger">Удалить</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Агентов нет — API недоступно, пока не создадите хотя бы одного.</p>
+  {% endif %}
+
+  <h2>Новый агент</h2>
+  <form method="post" action="/admin/users/agents" class="form-grid">
+    <label>Логин *<input type="text" name="username" required maxlength="64" autocomplete="off"></label>
+    <label>Пароль<input type="password" name="password" placeholder="пусто = сгенерировать" minlength="{{ min_len }}" autocomplete="new-password"></label>
+    <label>Описание<input type="text" name="description" maxlength="255" placeholder="для кого / зачем"></label>
+    <label>&nbsp;<button type="submit">Создать</button></label>
+  </form>
+</div>
+
+<div class="card">
+  <h1>Администраторы</h1>
+  <p class="muted">Доступ к этой админке. Свой пароль меняется на странице
+    <a href="/admin/account">«Мой аккаунт»</a>. Удалить себя или последнего админа нельзя.</p>
+  <table>
+    <thead><tr><th>Логин</th><th>Создан</th><th>Действия</th></tr></thead>
+    <tbody>
+      {% for u in admins %}
+      <tr>
+        <td><code>{{ u.username }}</code>{% if u.id == me_id %} <span class="muted">(вы)</span>{% endif %}</td>
+        <td class="muted">{{ u.created_at | dt }}</td>
+        <td>
+          {% if u.id != me_id %}
+          <div class="actions">
+            <details>
+              <summary class="linkish">Сбросить пароль</summary>
+              <form method="post" action="/admin/users/admins/{{ u.id }}/password" class="actions" style="margin-top:6px">
+                <input type="password" name="password" required minlength="{{ min_len }}" placeholder="новый пароль" autocomplete="new-password">
+                <button type="submit" class="secondary">Сменить</button>
+              </form>
+            </details>
+            <form method="post" action="/admin/users/admins/{{ u.id }}/delete"
+                  onsubmit="return confirm('Удалить админа {{ u.username }}?')">
+              <button type="submit" class="secondary danger">Удалить</button>
+            </form>
+          </div>
+          {% else %}
+          <a href="/admin/account">Сменить пароль</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Новый админ</h2>
+  <form method="post" action="/admin/users/admins" class="form-grid">
+    <label>Логин *<input type="text" name="username" required maxlength="64" autocomplete="off"></label>
+    <label>Пароль *<input type="password" name="password" required minlength="{{ min_len }}" autocomplete="new-password"></label>
+    <label>&nbsp;<button type="submit">Создать</button></label>
+  </form>
+</div>
+{% endblock %}

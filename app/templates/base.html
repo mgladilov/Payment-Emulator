@@ -55,6 +55,10 @@
       white-space: pre; margin: 8px 0 0; user-select: all; }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .actions form { margin: 0; }
+    button.danger { color: #991b1b; border-color: #fecaca; }
+    summary.linkish { color: var(--accent); cursor: pointer; list-style: none; }
+    summary.linkish::-webkit-details-marker { display: none; }
+    .form-grid button { align-self: flex-start; }
     .timeline { list-style: none; padding: 0; margin: 0; }
     .timeline li { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: baseline; }
     .timeline li:last-child { border-bottom: 0; }
@@ -100,9 +104,10 @@
       <a href="/admin/payouts">Выдачи</a>
       <a href="/admin/requests">API-запросы</a>
       <a href="/admin/settings">Настройки задержек</a>
+      <a href="/admin/users">Пользователи</a>
     </nav>
     <span class="spacer"></span>
-    <span class="muted">{{ admin_user }}</span>
+    <a class="muted" href="/admin/account" title="Мой аккаунт, смена пароля">{{ admin_user }}</a>
     <a href="/admin/logout">Выйти</a>
   </header>
   {% endif %}

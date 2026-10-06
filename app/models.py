@@ -14,7 +14,10 @@ PayoutEvent          — история кода выдачи: генераци�
                        (в т.ч. частичная), действия админа.
 ScenarioSetting      — настраиваемые задержки по суффиксу реквизита, редактируются
                        через админку без перезапуска приложения.
-AdminUser            — seed-админ(ы) для сессионной авторизации.
+AdminUser            — админы веб-админки (сессионная авторизация); первый
+                       создаётся автоматически, остальные — через админку.
+AgentAccount         — учётки агентов для HTTP Basic Auth API; управляются в
+                       админке, первая сидится из API_USERNAME/API_PASSWORD.
 """
 from datetime import datetime, timezone
 
@@ -75,6 +78,7 @@ class ApiRequestLog(Base):
     path: Mapped[str] = mapped_column(String(255), nullable=False)
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     client: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # логин Basic Auth
     # payment_id пуст для /check (платёж не создаётся); заполнен для /pay и /status.
     payment_id: Mapped[str | None] = mapped_column(
         ForeignKey("payments.id", ondelete="CASCADE"), nullable=True, index=True
@@ -157,3 +161,14 @@ class AdminUser(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+
+class AgentAccount(Base):
+    __tablename__ = "agent_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

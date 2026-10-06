@@ -5,6 +5,7 @@
 Фаза 3 — фоновая задача автоперехода pending → финал по задержкам из БД.
 Фаза 4 — веб-админка (Jinja2 + HTMX) под сессионной авторизацией.
 Фаза 5 — эмуляция выдачи наличных по кодам (/api/v2/check, /api/block, /api/pay).
+Фаза 6 — управление учётками: админы и агенты API в БД, правка через админку.
 """
 import asyncio
 import time
@@ -19,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import api_logs
+from app.api_auth import current_agent
 from app.admin_auth import NotAuthenticated
 from app.background import status_transition_loop
 from app.config import settings
@@ -30,6 +32,7 @@ from app.routes_api import router as api_router
 from app.routes_payout import ENDPOINTS as PAYOUT_ENDPOINTS
 from app.routes_payout import INTERNAL_ERROR as PAYOUT_INTERNAL_ERROR
 from app.routes_payout import router as payout_router
+from app.routes_users import router as users_router
 
 setup_logging()
 _request_logger = get_logger("request")
@@ -49,7 +52,7 @@ async def lifespan(app: FastAPI):
         _request_logger.parent.info("Payment Emulator остановлен")
 
 
-app = FastAPI(title="Payment Emulator", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="Payment Emulator", version="0.7.0", lifespan=lifespan)
 
 # Сессионная кука для админки (агентское API её не использует — там Basic Auth).
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
@@ -85,6 +88,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 app.include_router(api_router)
 app.include_router(payout_router)
 app.include_router(admin_router)
+app.include_router(users_router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -104,6 +108,7 @@ async def _validation_error(request: Request, exc: RequestValidationError):
             path=request.url.path,
             status_code=200,
             client=request.client.host if request.client else None,
+            agent=current_agent(request),
             # Ответ логируем ровно как отдали, а причину -100 — рядом с телом запроса.
             request_data={"body": body if isinstance(body, (dict, list)) else str(body),
                           "validation_errors": exc.errors()},

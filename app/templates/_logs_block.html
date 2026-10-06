@@ -12,6 +12,7 @@
         <code>{{ l.path }}</code>
         {% if l.status_code %}<span class="code">{{ l.status_code }}</span>{% endif %}
         <span class="muted">client={{ l.client or '-' }}</span>
+        {% if l.agent %}<span class="muted">agent={{ l.agent }}</span>{% endif %}
       </div>
       <div class="io"><span class="io-tag req">→ запрос</span>
         <pre>{{ l.request_body if l.request_body else '(без тела)' }}</pre></div>

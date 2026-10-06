@@ -20,7 +20,8 @@
   параллельные `/api/block` и `/api/pay` по одному коду (на SQLite такого нет)
 - **Админка**: серверный рендеринг **Jinja2** + **HTMX** (вендорится локально в
   `app/static/htmx.min.js`, без npm/CDN)
-- **Auth**: HTTP Basic Auth для агентского API; сессионные куки для админки
+- **Auth**: HTTP Basic Auth для агентского API, сессионные куки для админки;
+  обе группы учёток хранятся в БД (bcrypt) и управляются в админке
 - **Фоновые переходы**: asyncio-задача в lifespan-хуке
 
 ## Запуск
@@ -33,8 +34,9 @@
 docker compose up -d --build
 ```
 
-- Админка: http://localhost:8000/admin  (seed-логин `admin` / `admin`)
-- Агентское API: Basic Auth `agent` / `agent-secret`
+- Админка: http://localhost:8000/admin  (первый вход `admin` / `admin` — смените
+  пароль: клик по логину в шапке)
+- Агентское API: Basic Auth `agent` / `agent-secret` (учётки — в «Пользователи»)
 - Таблицы создаются и обновляются миграциями при старте (`AUTO_MIGRATE=true`).
 - Код смонтирован в контейнер, uvicorn запущен с `--reload`: правки в `app/`
   подхватываются сразу. Пересобирать образ (`--build`) нужно только после смены
@@ -69,9 +71,11 @@ cp .env.example .env            # при необходимости поправ
 .venv/bin/uvicorn app.main:app --reload
 ```
 
-Креды и секреты меняются через переменные окружения или `.env` (см.
-[app/config.py](app/config.py)): `DATABASE_URL`, `AUTO_MIGRATE`, `API_USERNAME`,
-`API_PASSWORD`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`. В Docker
+Настройки — переменные окружения или `.env` (см. [app/config.py](app/config.py)):
+`DATABASE_URL`, `AUTO_MIGRATE`, `SESSION_SECRET`, `BCRYPT_ROUNDS`.
+`ADMIN_USERNAME`/`ADMIN_PASSWORD` и `API_USERNAME`/`API_PASSWORD` задают только
+**первые** учётки на пустой базе; дальше пользователи управляются в админке
+(см. «Пользователи»). В Docker
 `DATABASE_URL` задан в `docker-compose.yml` и имеет приоритет над `.env`.
 
 ### Миграции (Alembic)
@@ -100,8 +104,10 @@ docker compose exec app python -m pytest   # в контейнере
 содержать `test` — тесты делают `DROP SCHEMA`). Схема накатывается миграциями
 Alembic один раз за прогон, перед каждым тестом таблицы очищаются `TRUNCATE`.
 Покрыты: сценарии/ФИО, агентское API платежей, идемпотентность, атомарный
-переход, логирование, админка и весь контур выдач (включая гонку параллельных
-`/api/block`).
+переход, логирование, админка, весь контур выдач (включая гонку параллельных
+`/api/block`) и управление учётками (сессии после смены пароля, кэш Basic Auth).
+Тесты ставят `BCRYPT_ROUNDS=4`, иначе сиды учёток перед каждым тестом заметно
+замедляют прогон.
 
 Нагрузочный тест против запущенного сервера:
 
@@ -136,7 +142,7 @@ Alembic один раз за прогон, перед каждым тестом 
 [app/payouts.py](app/payouts.py).
 
 Общие правила API выдач:
-- HTTP Basic Auth (те же креды, что у агентского API), HTTP-код **всегда 200**,
+- HTTP Basic Auth (те же учётки агентов, что у платёжного API), HTTP-код **всегда 200**,
   результат — в поле `state`.
 - Невалидное тело (нет обязательного поля, не тот тип) → `{"state": -100}`;
   причина видна в журнале API-запросов админки.
@@ -225,6 +231,37 @@ active ──block──▶ blocked ──pay(amount = остаток)──▶ 
   выдачи с `timestamp` терминала, действия админа), лог API-запросов по PIN,
   действия: сменить сценарий/OTP, «Снять блокировку» (зависший блок), «Истечь сейчас».
 
+## Пользователи
+
+Две независимые группы учёток, обе в БД (пароли — bcrypt), обе управляются
+на странице **«Пользователи»** (`/admin/users`):
+
+**Администраторы** — вход в веб-админку.
+- Первый админ создаётся автоматически из `ADMIN_USERNAME` / `ADMIN_PASSWORD`
+  (по умолчанию `admin` / `admin`), **только если админов в базе нет**. Дальше эти
+  переменные не читаются: сменённый пароль не затирается при рестарте, удалённый
+  `admin` не воскресает.
+- Свой пароль — «Мой аккаунт» (клик по логину в шапке, `/admin/account`),
+  с вводом текущего. Другим админам пароль сбрасывается без текущего.
+- Нельзя удалить себя и последнего админа.
+- После смены пароля или удаления все сессии этого админа становятся
+  невалидными (в куке хранится HMAC-штамп пароля, сверяется на каждом запросе).
+  Текущая сессия при смене своего пароля сохраняется.
+
+**Агенты API** — HTTP Basic Auth для `/check`, `/pay`, `/status` и `/api/*`.
+- Первый агент создаётся из `API_USERNAME` / `API_PASSWORD` (`agent` /
+  `agent-secret`), только если агентов в базе нет.
+- Создать агента, сменить пароль (пусто → сгенерировать 24 символа),
+  отключить/включить, удалить. Пароль показывается **один раз** сразу после
+  создания/смены — в ответе страницы, в сессию он не кладётся.
+- Проверка bcrypt кэшируется в памяти процесса на 30 минут (иначе каждый запрос
+  стоил бы ~0.2 с CPU). Изменения агентов в админке сбрасывают кэш — отключение
+  и смена пароля действуют сразу. При нескольких воркерах uvicorn остальные
+  процессы увидят изменение не позже чем через 30 минут.
+- Логин агента пишется в журнал API-запросов (`agent=…`), по нему работает поиск.
+
+Минимальная длина пароля — 8 символов. В логине нельзя `:` (ломает Basic Auth).
+
 ## Эндпоинты
 
 ### Агентское API (HTTP Basic Auth)
@@ -251,6 +288,10 @@ active ──block──▶ blocked ──pay(amount = остаток)──▶ 
 - `GET /admin/requests` — журнал всех агентских API-запросов (`/check` виден
   только здесь — он не создаёт платёж), фильтр по эндпоинту и поиск
 - `GET /admin/settings`, `POST /admin/settings` — редактирование задержек
+- `GET /admin/users` — админы и агенты API; `POST /admin/users/admins`,
+  `…/admins/{id}/password|delete`, `POST /admin/users/agents`,
+  `…/agents/{id}/password|toggle|delete`
+- `GET /admin/account`, `POST /admin/account/password` — смена своего пароля
 
 ## Логирование
 
@@ -287,8 +328,8 @@ app/
 ├── main.py          # точка входа: lifespan, middleware, роутеры
 ├── config.py        # настройки (env/.env)
 ├── database.py      # async engine/session (PostgreSQL, asyncpg)
-├── db_init.py       # миграции Alembic при старте + seed (сценарии, админ)
-├── models.py        # Payment, PaymentStatusHistory, PayoutCode, PayoutEvent, ScenarioSetting, AdminUser
+├── db_init.py       # миграции Alembic при старте + seed (сценарии, первый админ и агент)
+├── models.py        # Payment, PaymentStatusHistory, PayoutCode, PayoutEvent, ScenarioSetting, AdminUser, AgentAccount
 ├── scenarios.py     # таблица сценариев платежей (источник истины)
 ├── payout_scenarios.py  # коды state, сценарии и OTP-заглушка выдач (источник истины)
 ├── schemas.py       # pydantic-схемы агентского API и API выдач
@@ -296,13 +337,15 @@ app/
 ├── payouts.py       # коды выдачи: генерация, check/block/pay, действия админа
 ├── holder.py        # детерминированная генерация ФИО
 ├── background.py    # asyncio-задача автоперехода статусов
-├── api_auth.py      # HTTP Basic Auth (агентское API)
-├── admin_auth.py    # сессионная авторизация (админка)
+├── api_auth.py      # HTTP Basic Auth по agent_accounts + кэш проверок
+├── admin_auth.py    # сессионная авторизация (админка), штамп пароля в сессии
+├── users.py         # учётки: админы и агенты (создание, пароли, удаление)
 ├── routes_api.py    # /check, /pay, /status
 ├── routes_payout.py # /api/v2/check, /api/block, /api/pay
-├── routes_admin.py  # /admin/*
+├── routes_admin.py  # /admin/* (платежи, выдачи, журнал, задержки)
+├── routes_users.py  # /admin/users, /admin/account
 ├── templating.py    # Jinja2 + фильтры money/dt
-├── templates/       # base, login, payments/payouts list+detail, requests, settings
+├── templates/       # base, login, payments/payouts list+detail, requests, settings, users, account
 └── static/          # htmx.min.js (вендор)
 migrations/          # Alembic: env.py + versions/
 Dockerfile           # образ эмулятора (python:3.12-slim + requirements-dev)

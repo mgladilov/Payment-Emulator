@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import api_logs, payouts
-from app.api_auth import require_api_auth
+from app.api_auth import current_agent, require_api_auth
 from app.database import get_session
 from app.logging_config import get_logger
 from app.payout_scenarios import CheckState
@@ -51,6 +51,7 @@ async def _handle(
         path=request.url.path,
         status_code=200,
         client=request.client.host if request.client else None,
+        agent=current_agent(request),
         request_data=payload.model_dump(mode="json", by_alias=True),
         response_data=result,
         requisite=payload.pin,

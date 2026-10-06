@@ -12,6 +12,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "postgresql+asyncpg://payment_emulator:payment_emulator@localhost:5432/payment_emulator_test",
 )
 os.environ["DATABASE_NULL_POOL"] = "true"
+os.environ["BCRYPT_ROUNDS"] = "4"  # минимальная стоимость: сиды хешируют пароли перед каждым тестом
 # Тесты делают DROP SCHEMA — защита от случайного запуска по рабочей базе.
 assert "test" in os.environ["DATABASE_URL"].rsplit("/", 1)[-1], "TEST_DATABASE_URL must point to a *test* database"
 
@@ -21,7 +22,8 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 from app.database import Base, async_session_maker, engine  # noqa: E402
-from app.db_init import run_migrations, seed_admin, seed_scenarios  # noqa: E402
+from app import api_auth  # noqa: E402
+from app.db_init import run_migrations, seed_admin, seed_agent, seed_scenarios  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import ScenarioSetting  # noqa: E402
 
@@ -42,12 +44,14 @@ def migrated_schema():
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_db():
-    """Перед каждым тестом: пустые таблицы + сиды (сценарии, админ)."""
+    """Перед каждым тестом: пустые таблицы + сиды (сценарии, админ, агент)."""
     tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
     async with engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     await seed_scenarios()
     await seed_admin()
+    await seed_agent()
+    api_auth.invalidate_cache()
     yield
 
 
@@ -74,3 +78,7 @@ async def set_delay(suffix: str, seconds: int) -> None:
         setting.delay_seconds = seconds
         await session.commit()
 
+
+async def login(client, username: str = "admin", password: str = "admin"):
+    """Хелпер: войти в админку этим клиентом."""
+    return await client.post("/admin/login", data={"username": username, "password": password})
