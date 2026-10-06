@@ -24,7 +24,7 @@ POLL_INTERVAL_SECONDS = 1.0
 
 
 def _as_utc(dt: datetime) -> datetime:
-    """SQLite не хранит tzinfo — трактуем наивное время как UTC."""
+    """Наивное время (без tzinfo) трактуем как UTC; Postgres отдаёт aware."""
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)

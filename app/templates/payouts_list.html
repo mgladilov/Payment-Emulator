@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Выдачи — Payment Emulator{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom: 20px;">
+  <h1>Сгенерировать коды выдачи</h1>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if generated %}
+  <div class="flash">
+    Сгенерировано кодов: {{ generated.pins|length }} на сумму {{ generated.amount }} (валюта {{ generated.currency }}).
+    Скопируйте PIN — они также есть в списке ниже.
+    <div class="pins">{{ generated.pins | join('\n') }}</div>
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/payouts/generate">
+    <div class="form-grid">
+      <label>Сумма к выдаче *<input type="number" name="amount" min="1" required placeholder="1000"></label>
+      <label>Валюта (код) *<input type="number" name="currency" value="10" required></label>
+      <label>Количество кодов<input type="number" name="count" value="1" min="1" max="100"></label>
+      <label>Срок действия, ч<input type="number" name="ttl_hours" value="24" min="1" max="8760"></label>
+      <label>Сценарий
+        <select name="scenario">
+          {% for key, sc in scenarios.items() %}
+          <option value="{{ key }}">{{ sc.description }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Телефон<input type="text" name="phone" placeholder="996000111222"></label>
+      <label>ФИО<input type="text" name="fio" placeholder="FirstName LastName"></label>
+      <label>exchangeId<input type="number" name="exchange_id" placeholder="пусто = null"></label>
+      <label>Курс (rate)<input type="text" name="rate" value="1" inputmode="decimal"></label>
+      <label>Комиссия<input type="text" name="commission" value="0" inputmode="decimal"></label>
+      <label class="check"><input type="checkbox" name="otp_needed" checked> Нужен OTP</label>
+    </div>
+    <button type="submit">Сгенерировать</button>
+    <span class="muted" style="margin-left:10px">OTP-заглушка: <code>0000</code> — верный, <code>0002</code> — истёк, любой другой — неверный.</span>
+  </form>
+</div>
+
+<div class="card">
+  <h1>Коды выдачи</h1>
+  <form class="filters" method="get" action="/admin/payouts">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Поиск по PIN">
+    <select name="status">
+      <option value="">Все статусы</option>
+      {% for s in statuses %}
+      <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Применить</button>
+    <a class="btn secondary" href="/admin/payouts" style="text-decoration:none">Сбросить</a>
+    <span class="spacer" style="flex:1"></span>
+    <span class="muted">Найдено: {{ codes|length }}</span>
+  </form>
+
+  {% if codes %}
+  <table>
+    <thead>
+      <tr>
+        <th>PIN</th><th>Остаток / сумма</th><th>Валюта</th><th>Сценарий</th><th>OTP</th><th>Статус</th><th>Истекает</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c, st in codes %}
+      <tr>
+        <td><a href="/admin/payouts/{{ c.id }}"><code>{{ c.pin }}</code></a></td>
+        <td>{{ c.balance }} / {{ c.amount }}</td>
+        <td>{{ c.currency }}</td>
+        <td class="muted">{{ c.scenario }}</td>
+        <td class="muted">{{ 'да' if c.otp_needed else 'нет' }}</td>
+        <td><span class="badge {{ st }}">{{ st }}</span></td>
+        <td class="muted">{{ c.expires_at | dt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Кодов не найдено. Сгенерируйте код формой выше.</p>
+  {% endif %}
+</div>
+{% endblock %}

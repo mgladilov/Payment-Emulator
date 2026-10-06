@@ -1,30 +1,51 @@
 """Общие фикстуры тестов.
 
-Тесты гоняются на отдельном файле SQLite (не на боевом emulator.db). Переменная
-DATABASE_URL выставляется ДО импорта app, потому что engine создаётся при импорте.
+Тесты гоняются на отдельной базе PostgreSQL (по умолчанию payment_emulator_test,
+переопределяется TEST_DATABASE_URL). Переменные окружения выставляются ДО
+импорта app, потому что engine создаётся при импорте. NullPool — соединения
+asyncpg привязаны к event loop, а у каждого теста свой цикл.
 """
 import os
-import pathlib
-import tempfile
 
-_TEST_DB = pathlib.Path(tempfile.gettempdir()) / "pe_pytest.db"
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB}"
+os.environ["DATABASE_URL"] = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://payment_emulator:payment_emulator@localhost:5432/payment_emulator_test",
+)
+os.environ["DATABASE_NULL_POOL"] = "true"
+# Тесты делают DROP SCHEMA — защита от случайного запуска по рабочей базе.
+assert "test" in os.environ["DATABASE_URL"].rsplit("/", 1)[-1], "TEST_DATABASE_URL must point to a *test* database"
 
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 from app.database import Base, async_session_maker, engine  # noqa: E402
-from app.db_init import seed_admin, seed_scenarios  # noqa: E402
+from app.db_init import run_migrations, seed_admin, seed_scenarios  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import ScenarioSetting  # noqa: E402
 
 
+@pytest.fixture(scope="session", autouse=True)
+def migrated_schema():
+    """Один раз за прогон: схема с нуля через миграции Alembic (заодно проверяет их)."""
+    import asyncio
+
+    async def _reset():
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+        await run_migrations()
+
+    asyncio.run(_reset())
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def reset_db():
-    """Перед каждым тестом: чистая схема + сиды (сценарии, админ)."""
+    """Перед каждым тестом: пустые таблицы + сиды (сценарии, админ)."""
+    tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     await seed_scenarios()
     await seed_admin()
     yield
@@ -52,3 +73,4 @@ async def set_delay(suffix: str, seconds: int) -> None:
         setting = await session.get(ScenarioSetting, suffix)
         setting.delay_seconds = seconds
         await session.commit()
+

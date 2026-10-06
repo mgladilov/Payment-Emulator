@@ -1,0 +1,49 @@
+# Весь стенд одной командой:
+#   docker compose up -d --build
+# Админка: http://localhost:8000/admin, API: Basic Auth agent / agent-secret.
+#
+# app     — эмулятор (uvicorn --reload, код смонтирован с хоста: правки
+#           подхватываются без пересборки; пересобирать — только при смене
+#           requirements*.txt).
+# postgres — PostgreSQL 17 с базами payment_emulator и payment_emulator_test.
+services:
+  app:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql+asyncpg://payment_emulator:payment_emulator@postgres:5432/payment_emulator
+      TEST_DATABASE_URL: postgresql+asyncpg://payment_emulator:payment_emulator@postgres:5432/payment_emulator_test
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - .:/app   # исходники + logs/ пишутся прямо в папку проекта на хосте
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: payment_emulator
+      POSTGRES_PASSWORD: payment_emulator
+      POSTGRES_DB: payment_emulator
+    ports:
+      # Наружу — чтобы подключаться с хоста (psql, IDE, pytest из .venv).
+      # Хост-порт меняется через POSTGRES_PORT, если 5432 занят.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment_emulator"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:

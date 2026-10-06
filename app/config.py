@@ -6,10 +6,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # База данных
-    database_url: str = "sqlite+aiosqlite:///./emulator.db"
+    # База данных (PostgreSQL через asyncpg). Дефолт совпадает с docker-compose.yml.
+    database_url: str = "postgresql+asyncpg://payment_emulator:payment_emulator@localhost:5432/payment_emulator"
+    # NullPool — без пула соединений. Нужен тестам: каждый тест живёт в своём
+    # event loop, а соединения asyncpg привязаны к циклу, в котором созданы.
+    database_null_pool: bool = False
+    # Применять миграции Alembic при старте приложения (alembic upgrade head).
+    auto_migrate: bool = True
 
-    # HTTP Basic Auth для агентского API (/check, /pay, /status)
+    # HTTP Basic Auth для агентского API (/check, /pay, /status, /api/*)
     api_username: str = "agent"
     api_password: str = "agent-secret"
 

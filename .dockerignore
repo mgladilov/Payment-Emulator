@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+logs/
+emulator.db*
+graphify-out/
+.idea/
+.vscode/
+.DS_Store

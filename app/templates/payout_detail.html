@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Код {{ code.pin }} — Payment Emulator{% endblock %}
+{% block content %}
+<p><a href="/admin/payouts">← К списку кодов выдачи</a></p>
+<div class="card">
+  <h1>Код выдачи <code>{{ code.pin }}</code> <span class="badge {{ effective_status }}">{{ effective_status }}</span></h1>
+  <dl class="kv">
+    <dt>Остаток к выдаче</dt><dd><strong>{{ code.balance }}</strong> из {{ code.amount }}</dd>
+    <dt>Валюта</dt><dd>{{ code.currency }}</dd>
+    <dt>Сценарий</dt><dd>{{ code.scenario }} <span class="muted">— {{ scenarios[code.scenario].description if code.scenario in scenarios else '?' }}</span></dd>
+    <dt>OTP</dt><dd>{% if code.otp_needed %}нужен <span class="muted">(верный: <code>{{ otp_valid }}</code>)</span>{% else %}не нужен{% endif %}</dd>
+    <dt>Телефон</dt><dd>{{ code.phone or '—' }}</dd>
+    <dt>ФИО</dt><dd>{{ code.fio or '—' }}</dd>
+    <dt>exchangeId</dt><dd>{{ code.exchange_id if code.exchange_id is not none else '—' }}</dd>
+    <dt>Курс / комиссия</dt><dd>{{ code.rate }} / {{ code.commission }}</dd>
+    <dt>Заблокирован</dt><dd>{% if code.blocked_point_id %}точкой <code>{{ code.blocked_point_id }}</code>, {{ code.blocked_at | dt }}{% else %}—{% endif %}</dd>
+    <dt>Истекает</dt><dd>{{ code.expires_at | dt }}</dd>
+    <dt>Создан</dt><dd>{{ code.created_at | dt }}</dd>
+  </dl>
+
+  <hr style="border:0;border-top:1px solid var(--border);margin:20px 0">
+  <h2>Действия</h2>
+  <div class="actions">
+    <form method="post" action="/admin/payouts/{{ code.id }}/update" class="actions">
+      <select name="scenario">
+        {% for key, sc in scenarios.items() %}
+        <option value="{{ key }}" {% if key == code.scenario %}selected{% endif %}>{{ sc.description }}</option>
+        {% endfor %}
+      </select>
+      <label><input type="checkbox" name="otp_needed" {% if code.otp_needed %}checked{% endif %}> Нужен OTP</label>
+      <button type="submit">Сохранить</button>
+    </form>
+    {% if code.status == 'blocked' %}
+    <form method="post" action="/admin/payouts/{{ code.id }}/unblock"><button type="submit" class="secondary">Снять блокировку</button></form>
+    {% endif %}
+    {% if code.status != 'paid' and effective_status != 'expired' %}
+    <form method="post" action="/admin/payouts/{{ code.id }}/expire"><button type="submit" class="secondary">Истечь сейчас</button></form>
+    {% endif %}
+  </div>
+
+  <hr style="border:0;border-top:1px solid var(--border);margin:20px 0">
+  <h2>История кода</h2>
+  <ul class="timeline">
+    {% for e in code.events %}
+    <li>
+      <span class="ts">{{ e.created_at | dt }}</span>
+      <span><strong>{{ e.event }}</strong>
+        {% if e.point_id %}<span class="muted"> · точка <code>{{ e.point_id }}</code></span>{% endif %}
+        {% if e.amount is not none %}<span class="muted"> · выдано {{ e.amount }}</span>{% endif %}
+        {% if e.balance_after is not none %}<span class="muted"> · остаток {{ e.balance_after }}</span>{% endif %}
+        {% if e.client_timestamp %}<span class="muted"> · timestamp терминала {{ e.client_timestamp }}</span>{% endif %}
+        {% if e.note %}<span class="muted"> — {{ e.note }}</span>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <hr style="border:0;border-top:1px solid var(--border);margin:20px 0">
+  <h2>Логи запросов</h2>
+  <div class="logbox">
+    {% for l in logs %}
+    <div class="logentry">
+      <div class="logline">
+        <span class="ts">{{ l.timestamp | dt }}</span>
+        <span class="endpoint {{ l.endpoint }}">{{ l.endpoint }}</span>
+        <code>{{ l.path }}</code>
+        <span class="muted">client={{ l.client or '-' }}</span>
+      </div>
+      <div class="io"><span class="io-tag req">→ запрос</span>
+        <pre>{{ l.request_body if l.request_body else '(без тела)' }}</pre></div>
+      <div class="io"><span class="io-tag resp">← ответ</span>
+        <pre>{{ l.response_body if l.response_body else '(нет)' }}</pre></div>
+    </div>
+    {% else %}
+    <div class="muted">Пока нет запросов по этому коду.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

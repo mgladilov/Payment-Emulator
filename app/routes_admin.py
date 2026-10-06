@@ -1,24 +1,32 @@
-"""Веб-админка: сессионный вход, список/деталь платежей, настройки задержек.
+"""Веб-админка: сессионный вход, список/деталь платежей, коды выдачи, настройки задержек.
 
 Роуты /admin/* защищены сессионной авторизацией (require_admin) — это отдельный
 механизм от HTTP Basic Auth агентского API.
 """
+from decimal import Decimal, InvalidOperation
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import api_logs, holder, scenarios
+from app import api_logs, holder, payout_scenarios, payouts, scenarios
 from app.admin_auth import SESSION_KEY, authenticate_admin, require_admin
 from app.database import get_session
-from app.models import Payment, ScenarioSetting
+from app.models import Payment, PayoutCode, ScenarioSetting, utcnow
 from app.templating import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Рабочие статусы платежа (без accepted — он только подтверждение/шаг истории).
 STATUS_OPTIONS = ["pending", "success", "failed", "unknown"]
+
+# Фильтр журнала API-запросов: эндпоинты платежей и выдач.
+API_LOG_ENDPOINTS = ["check", "pay", "status", "payout_check", "payout_block", "payout_pay"]
+
+# Сессионный ключ для одноразового показа только что сгенерированных PIN.
+GENERATED_PINS_KEY = "generated_pins"
 
 
 # --- Аутентификация -------------------------------------------------------
@@ -172,11 +180,154 @@ async def api_requests(
         {
             "admin_user": admin,
             "logs": logs,
-            "endpoints": ["check", "pay", "status"],
+            "endpoints": API_LOG_ENDPOINTS,
             "endpoint": endpoint,
             "q": q,
         },
     )
+
+
+# --- Коды выдачи -----------------------------------------------------------
+
+@router.get("/payouts", response_class=HTMLResponse)
+async def payouts_list(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+    q: str | None = None,
+    status: str | None = None,
+):
+    now = utcnow()
+    stmt = select(PayoutCode).order_by(PayoutCode.created_at.desc(), PayoutCode.id.desc())
+    # "expired" не хранится — это active с истёкшим сроком; active — только живые.
+    if status == payout_scenarios.STATUS_EXPIRED:
+        stmt = stmt.where(PayoutCode.status == payout_scenarios.STATUS_ACTIVE, PayoutCode.expires_at <= now)
+    elif status == payout_scenarios.STATUS_ACTIVE:
+        stmt = stmt.where(PayoutCode.status == status, PayoutCode.expires_at > now)
+    elif status:
+        stmt = stmt.where(PayoutCode.status == status)
+    if q:
+        stmt = stmt.where(PayoutCode.pin.like(f"%{q.strip()}%"))
+    codes = (await session.scalars(stmt.limit(500))).all()
+    return templates.TemplateResponse(
+        request,
+        "payouts_list.html",
+        {
+            "admin_user": admin,
+            "codes": [(c, payouts.effective_status(c, now)) for c in codes],
+            "statuses": payout_scenarios.STATUS_OPTIONS,
+            "scenarios": payout_scenarios.SCENARIOS,
+            "q": q,
+            "status": status,
+            "generated": request.session.pop(GENERATED_PINS_KEY, None),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+def _opt_int(raw: str | None) -> int | None:
+    raw = (raw or "").strip()
+    return int(raw) if raw else None
+
+
+@router.post("/payouts/generate", include_in_schema=False)
+async def payouts_generate(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    form = await request.form()
+    try:
+        amount = int(form.get("amount", ""))
+        currency = int(form.get("currency", ""))
+        count = int(form.get("count") or 1)
+        ttl_hours = int(form.get("ttl_hours") or 24)
+        exchange_id = _opt_int(form.get("exchange_id"))
+        rate = Decimal(str(form.get("rate") or "1").replace(",", "."))
+        commission = Decimal(str(form.get("commission") or "0").replace(",", "."))
+    except (TypeError, ValueError, InvalidOperation):
+        return RedirectResponse("/admin/payouts?error=Некорректные+числовые+поля", status_code=303)
+    scenario = str(form.get("scenario") or payout_scenarios.DEFAULT_SCENARIO)
+    if amount <= 0 or not 1 <= count <= 100 or not 1 <= ttl_hours <= 24 * 365 or rate <= 0 or commission < 0:
+        return RedirectResponse("/admin/payouts?error=Значения+вне+допустимых+границ", status_code=303)
+    if scenario not in payout_scenarios.SCENARIOS:
+        return RedirectResponse("/admin/payouts?error=Неизвестный+сценарий", status_code=303)
+
+    codes = await payouts.create_codes(
+        session,
+        count=count,
+        amount=amount,
+        currency=currency,
+        ttl_hours=ttl_hours,
+        scenario=scenario,
+        otp_needed=form.get("otp_needed") == "on",
+        phone=str(form.get("phone") or "").strip()[:32] or None,
+        fio=str(form.get("fio") or "").strip()[:255] or None,
+        exchange_id=exchange_id,
+        rate=rate,
+        commission=commission,
+    )
+    request.session[GENERATED_PINS_KEY] = {
+        "pins": [c.pin for c in codes],
+        "amount": amount,
+        "currency": currency,
+    }
+    return RedirectResponse("/admin/payouts", status_code=status.HTTP_303_SEE_OTHER)
+
+
+async def _load_code(session: AsyncSession, code_id: int) -> PayoutCode:
+    code = await session.scalar(
+        select(PayoutCode).where(PayoutCode.id == code_id).options(selectinload(PayoutCode.events))
+    )
+    if code is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payout code not found")
+    return code
+
+
+@router.get("/payouts/{code_id}", response_class=HTMLResponse)
+async def payout_detail(
+    request: Request,
+    code_id: int,
+    admin: str = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    code = await _load_code(session, code_id)
+    return templates.TemplateResponse(
+        request,
+        "payout_detail.html",
+        {
+            "admin_user": admin,
+            "code": code,
+            "effective_status": payouts.effective_status(code),
+            "scenarios": payout_scenarios.SCENARIOS,
+            "logs": await api_logs.list_for_requisite(session, code.pin),
+            "otp_valid": payout_scenarios.OTP_VALID,
+        },
+    )
+
+
+@router.post("/payouts/{code_id}/{action}", include_in_schema=False)
+async def payout_action(
+    request: Request,
+    code_id: int,
+    action: str,
+    admin: str = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    code = await _load_code(session, code_id)
+    if action == "unblock":
+        await payouts.admin_unblock(session, code)
+    elif action == "expire":
+        await payouts.admin_expire(session, code)
+    elif action == "update":
+        form = await request.form()
+        scenario = str(form.get("scenario") or "")
+        if scenario not in payout_scenarios.SCENARIOS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown scenario")
+        await payouts.admin_update(session, code, scenario=scenario, otp_needed=form.get("otp_needed") == "on")
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown action")
+    return RedirectResponse(f"/admin/payouts/{code_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # --- Настройки задержек ---------------------------------------------------

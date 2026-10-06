@@ -117,3 +117,16 @@ async def list_all(
             | ApiRequestLog.path.like(like)
         )
     return list((await session.scalars(stmt.limit(limit))).all())
+
+
+async def list_for_requisite(session: AsyncSession, requisite: str, limit: int = 200) -> list[ApiRequestLog]:
+    """Лог по реквизиту/PIN (для страницы кода выдачи), в хронологическом порядке."""
+    rows = (
+        await session.scalars(
+            select(ApiRequestLog)
+            .where(ApiRequestLog.requisite == requisite)
+            .order_by(ApiRequestLog.timestamp.desc(), ApiRequestLog.id.desc())
+            .limit(limit)
+        )
+    ).all()
+    return list(reversed(rows))

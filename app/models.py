@@ -7,13 +7,20 @@ ApiRequestLog        — полный лог агентских API-запрос
                        ответ. Для /pay и /status привязан к payment_id, для
                        /check — нет (платёж не создаётся). Показывается в окне на
                        странице платежа и на общей странице /admin/requests.
+PayoutCode           — коды выдачи (PIN из 12 цифр) для эмуляции выдачи наличных:
+                       остаток, блокировка точкой, срок действия, принудительный
+                       сценарий ответа.
+PayoutEvent          — история кода выдачи: генерация, блокировка, выплата
+                       (в т.ч. частичная), действия админа.
 ScenarioSetting      — настраиваемые задержки по суффиксу реквизита, редактируются
                        через админку без перезапуска приложения.
 AdminUser            — seed-админ(ы) для сессионной авторизации.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from decimal import Decimal
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -62,7 +69,8 @@ class ApiRequestLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
-    endpoint: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # check|pay|status
+    # check|pay|status — платежи; payout_check|payout_block|payout_pay — выдачи
+    endpoint: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     method: Mapped[str] = mapped_column(String(10), nullable=False)
     path: Mapped[str] = mapped_column(String(255), nullable=False)
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -71,9 +79,64 @@ class ApiRequestLog(Base):
     payment_id: Mapped[str | None] = mapped_column(
         ForeignKey("payments.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    # Реквизит платежа или PIN кода выдачи — по нему ищется лог в админке.
     requisite: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     request_body: Mapped[str | None] = mapped_column(Text, nullable=True)   # что прислал агент (JSON)
     response_body: Mapped[str | None] = mapped_column(Text, nullable=True)  # что ответили мы (JSON)
+
+
+class PayoutCode(Base):
+    """Код выдачи. Суммы — целые, в единицах валюты как в API выдач (500 = 500 сом).
+
+    status хранит только рабочее состояние (active | blocked | paid). «Истёк» —
+    вычисляемое: active и expires_at в прошлом (см. app.payouts.effective_status).
+    """
+
+    __tablename__ = "payout_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pin: Mapped[str] = mapped_column(String(12), nullable=False, unique=True, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)   # исходная сумма кода
+    balance: Mapped[int] = mapped_column(Integer, nullable=False)  # доступно к выдаче сейчас
+    currency: Mapped[int] = mapped_column(Integer, nullable=False)  # числовой код валюты из API
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    scenario: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
+
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fio: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    exchange_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    otp_needed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    rate: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False, default=Decimal("1"))
+    commission: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0"))
+
+    blocked_point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    events: Mapped[list["PayoutEvent"]] = relationship(
+        back_populates="code",
+        cascade="all, delete-orphan",
+        order_by="PayoutEvent.created_at, PayoutEvent.id",
+    )
+
+
+class PayoutEvent(Base):
+    __tablename__ = "payout_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code_id: Mapped[int] = mapped_column(ForeignKey("payout_codes.id", ondelete="CASCADE"), index=True)
+    # created | blocked | paid | partial | admin_unblock | admin_expire | admin_update
+    event: Mapped[str] = mapped_column(String(32), nullable=False)
+    point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    amount: Mapped[int | None] = mapped_column(Integer, nullable=True)        # выдано в этом событии
+    balance_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    client_timestamp: Mapped[str | None] = mapped_column(String(64), nullable=True)  # timestamp из /api/pay как есть
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    code: Mapped["PayoutCode"] = relationship(back_populates="events")
 
 
 class ScenarioSetting(Base):
@@ -93,3 +156,4 @@ class AdminUser(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+

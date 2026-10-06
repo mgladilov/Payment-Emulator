@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _digits(value: str) -> str:
@@ -59,3 +59,32 @@ class StatusResponse(BaseModel):
     currency: str
     created_at: datetime
     updated_at: datetime
+
+
+# --- API выдачи наличных (/api/v2/check, /api/block, /api/pay) -------------
+# Поля в camelCase, как в контракте. pin/pointId/otp принимаются и строкой, и
+# числом (число приводится к строке). Сумма — целое в единицах валюты (500 = 500
+# сом), не в минимальных единицах. Ошибка валидации тела отдаётся как
+# {"state": -100} с HTTP 200 (см. обработчик в app.main), а не 422.
+
+class _PayoutBase(BaseModel):
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    pin: str = Field(..., max_length=64, description="Код выдачи, 12 цифр")
+
+
+class PayoutCheckRequest(_PayoutBase):
+    currency: int = Field(..., description="Числовой код валюты")
+    point_id: str = Field(..., alias="pointId", max_length=64)
+
+
+class PayoutBlockRequest(_PayoutBase):
+    point_id: str = Field(..., alias="pointId", max_length=64)
+    otp: str | None = Field(default=None, max_length=16)
+
+
+class PayoutPayRequest(_PayoutBase):
+    timestamp: str = Field(..., max_length=64, description="Время выдачи на терминале")
+    currency: int
+    amount: int = Field(..., ge=0, description="Сколько фактически выдал терминал")
+    point_id: str = Field(..., alias="pointId", max_length=64)

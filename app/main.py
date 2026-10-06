@@ -4,6 +4,7 @@
 Фаза 2 — агентское API (/check, /pay, /status) под HTTP Basic Auth.
 Фаза 3 — фоновая задача автоперехода pending → финал по задержкам из БД.
 Фаза 4 — веб-админка (Jinja2 + HTMX) под сессионной авторизацией.
+Фаза 5 — эмуляция выдачи наличных по кодам (/api/v2/check, /api/block, /api/pay).
 """
 import asyncio
 import time
@@ -11,17 +12,24 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from app import api_logs
 from app.admin_auth import NotAuthenticated
 from app.background import status_transition_loop
 from app.config import settings
+from app.database import async_session_maker
 from app.db_init import init_db
 from app.logging_config import get_logger, setup_logging
 from app.routes_admin import router as admin_router
 from app.routes_api import router as api_router
+from app.routes_payout import ENDPOINTS as PAYOUT_ENDPOINTS
+from app.routes_payout import INTERNAL_ERROR as PAYOUT_INTERNAL_ERROR
+from app.routes_payout import router as payout_router
 
 setup_logging()
 _request_logger = get_logger("request")
@@ -41,7 +49,7 @@ async def lifespan(app: FastAPI):
         _request_logger.parent.info("Payment Emulator остановлен")
 
 
-app = FastAPI(title="Payment Emulator", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="Payment Emulator", version="0.6.0", lifespan=lifespan)
 
 # Сессионная кука для админки (агентское API её не использует — там Basic Auth).
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
@@ -75,7 +83,34 @@ async def log_requests(request: Request, call_next):
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 app.include_router(api_router)
+app.include_router(payout_router)
 app.include_router(admin_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError):
+    """API выдач по контракту отвечает только полем state: невалидное тело —
+    {"state": -100} с HTTP 200 (с записью в журнал). Остальные роуты — обычный 422."""
+    endpoint = PAYOUT_ENDPOINTS.get(request.url.path)
+    if endpoint is None:
+        return await request_validation_exception_handler(request, exc)
+    body = exc.body
+    pin = body.get("pin") if isinstance(body, dict) else None
+    async with async_session_maker() as session:
+        await api_logs.log_api_call(
+            session,
+            endpoint=endpoint,
+            method=request.method,
+            path=request.url.path,
+            status_code=200,
+            client=request.client.host if request.client else None,
+            # Ответ логируем ровно как отдали, а причину -100 — рядом с телом запроса.
+            request_data={"body": body if isinstance(body, (dict, list)) else str(body),
+                          "validation_errors": exc.errors()},
+            response_data=PAYOUT_INTERNAL_ERROR,
+            requisite=str(pin)[:64] if pin is not None else None,
+        )
+    return JSONResponse(PAYOUT_INTERNAL_ERROR)
 
 
 @app.exception_handler(NotAuthenticated)

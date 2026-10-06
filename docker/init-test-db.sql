@@ -1,0 +1,1 @@
+CREATE DATABASE payment_emulator_test OWNER payment_emulator;
